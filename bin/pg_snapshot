@@ -1,0 +1,94 @@
+#!/bin/sh
+# dev-snapshot -- make dated snapshot of csb-dev and delete older snapshots
+# usage: sudo -u postgres dev-snapshot
+
+# This is Genentech-specific but should be generalized
+
+
+MAX_SNAPS=2
+SRC_DATNAME=csb-dev
+
+
+ts=`/bin/date +%Y%m%d-%H%M%S`
+snap_prefix="${SRC_DATNAME}-snapshot"
+snap_name="$snap_prefix-$ts"
+
+
+/bin/date +'%F %T: started'
+
+
+DUMP_OPTS=
+PSQL_OPTS='-qa -v ON_ERROR_STOP=1'
+ECHO=
+if [ -n "$SNAPSHOT_DEBUG" ]; then
+		DUMP_OPTS=-s
+		#PSQL_OPTS=-qa
+		ECHO='echo +'
+		snap_name="dbg_$snap_name"
+fi
+
+
+echo
+echo ============================================================
+echo "* selected environment:"
+echo PATH=${PATH}
+for exe in createdb psql pg_dump; do
+	type -p $exe
+	$exe --version
+done
+
+
+# This code uses pg_dump rather than createdb -T because the latter
+# requires exclusive access to the database.
+echo
+echo ============================================================
+echo "* create/dump/restore:"
+(
+set -ex
+createdb -O unison -E UTF-8 "tmp_${snap_name}"
+pg_dump $DUMP_OPTS "$SRC_DATNAME" | psql $PSQL_OPTS -d "tmp_$snap_name"
+)
+STATUS=$?
+
+
+if [ "$STATUS" = "0" ]; then
+	# update the snapshot's datconfig (e.g., search_path) to be identical
+	# to the source's
+	psql -d "tmp_$snap_name" <<EOF
+UPDATE pg_database D SET datconfig=S.datconfig,datacl=S.datacl
+  FROM pg_database S
+ WHERE S.datname='$SRC_DATNAME' AND D.datname='tmp_$snap_name';
+EOF
+
+	psql -d "tmp_$snap_name" -c 'analyze verbose'
+	
+	psql -d template1 -c "alter database \"tmp_$snap_name\" rename to \"$snap_name\""
+	
+	# keep only the most recent MAX_SNAPS snapshots
+	psql -Atc "select datname from pg_database where datname~'^$snap_prefix-' order by datname desc offset $MAX_SNAPS" \
+	| while read datname; do
+		(set -x; $ECHO dropdb "$datname")
+	done
+fi
+
+
+echo
+echo ============================================================
+echo "* database sizes:"
+psql -X <<EOF
+SELECT datname AS "database",pg_size_pretty(pg_database_size(oid)) AS "size"
+  FROM pg_database
+ WHERE datname~'^csb|^tmp'
+ ORDER by datname
+EOF
+
+echo
+echo ============================================================
+echo "* /srv space:"
+df -h /srv
+
+
+/bin/date +"%F %T: finished [STATUS=$STATUS]"
+
+
+exit $STATUS

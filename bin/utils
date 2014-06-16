@@ -1,0 +1,54 @@
+# -*- sh -*-
+# $Id: utils,v 1.14 2006/11/04 03:48:38 rkh Exp $
+# utils -- misc defaults and utilities for csb-db shell scripts
+
+JEMAPPELLE=`basename $0`
+LOG_DIR="$HOME/adm/logs"
+LOG_FN="$LOG_DIR/$JEMAPPELLE"
+
+
+# logger -- format a log line
+# logger <message>
+logger () { 
+	echo `date +"%Y/%m/%d %H:%M:%S"` "$JEMAPPELLE[$$]" "$@"
+}
+
+
+# pipe_logger -- send lines on stdin to logger, line-by-line
+# NOTE: while piping through sed or similar might seem to be better,
+# that would result in a static datestamp. 
+pipe_logger () {
+	while read f; do [ -n "$f" ] && logger "  $f"; done
+}
+
+
+# die -- log error (with logger), then exit
+die () {
+	logger "! ERROR:"
+	logger "!  $@";
+	exit 1;
+}
+
+
+# warn -- log error (with logger), and continue
+warn () {
+	logger "! WARNING:"
+	logger "!  $@";
+}
+
+
+# dothis -- execute a command and log stdout+stderr
+dothis () {
+	logger "running: $@"
+	eval "$@; echo exit status is \$?" 2>&1 | pipe_logger
+}
+
+
+
+# startup notification
+if [ -t 0 ]; then
+	logger "logging to stdout/stderr (`tty`)"
+else
+	#logger "logging to $LOG_DIR/$JEMAPPELLE"
+	exec >>"$LOG_DIR/$JEMAPPELLE" 2>&1
+fi

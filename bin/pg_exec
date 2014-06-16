@@ -1,0 +1,22 @@
+#!/bin/sh -e
+
+TMP=/tmp/pg_desc-$$
+unset ENSCRIPT
+
+if [ "$1" = "-E" ]; then
+	ENSCRIPT=1
+	shift
+fi
+
+echo "$@" >$TMP
+psql <<EOT >>$TMP
+$*
+EOT
+
+if [ "$ENSCRIPT" = 1 ]; then
+	enscript -c -fCourier7 -G <"$TMP" -b "$*"
+else
+	cat $TMP
+fi
+
+/bin/rm -f "$TMP"

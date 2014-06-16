@@ -1,0 +1,19 @@
+#!/bin/sh
+# $Id: nightly,v 1.10 2005/05/13 19:14:23 rkh Exp $
+
+# nightly -- tasks to perform nightly
+# you must set PGPASSWORD before running this script
+
+source `dirname $0`/utils
+
+export PGHOST=localhost
+
+if [ -z "$PGPASSWORD" ]; then
+	die "PGPASSWORD not set"
+fi
+
+V=`type -p vacuumdb`
+
+logger "vacuum analyze started"
+dothis "$V" -Upostgres -dcsb-dev --analyze
+logger "vacuum analyze done"

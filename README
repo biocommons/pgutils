@@ -1,0 +1,17 @@
+pgutils -- monitor and identify problems in PostgreSQL databases
+2008-08-02 Reece Hart <reece@harts.net>
+
+
+pgutils consists of views and functions that I use to catch common
+problems in schema design, and particularly those problems on which I've
+already been snagged.  It's very far from being a complete kibitzer for
+all problems.  I will gladly take bug fixes and contributions to expand
+its coverage.
+
+The code is released under the New BSD License and available at
+http://code.google.com/p/pgutils/ .
+
+The only documentation is `\dv+ pgutils.'. PostgreSQL >=8.1 is required.
+
+Cheers,
+Reece

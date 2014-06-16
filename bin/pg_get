@@ -1,0 +1,110 @@
+#!/usr/bin/perl
+# pg_get -- fetch items matching any given regexp from a "custom" format pgdump
+
+#
+# eg$ pg_dump -Fc mydb > my_db.pgdfc
+# eg$ pg_get my_db.pgdfc my_function my_table
+
+# TODO:
+# 1) accept schema-qualified names. This will require futzing with the
+# pg_restore -l TOC
+#
+# 2) output schema-qualified names by post-processing the extracted SQL.
+
+
+use strict;
+use warnings;
+use File::Temp qw(tempfile);
+use IO::Pipe;
+use Data::Dumper;
+
+
+sub __match_any($@);
+
+
+my $dumpfn;
+defined ($dumpfn = shift)
+  || die("$0: missing dumpfn (must be custom format\n");
+(-f $dumpfn and -r $dumpfn)
+  || die("$dumpfn: not a readable file\n");
+
+
+(@ARGV)
+  || die("$0: missing regexp(s) to fetch\n");
+my @re = @ARGV;								# regexps
+my @cre = map { qr/$_/ } @re;				# compiled regexps
+my @matched = map {undef} @re;				# initialize vector to undef
+my $nmatched = 0;
+my @toc;
+
+# filter TOC by regexps into temp list file
+open(F, "pg_restore -l $dumpfn|")
+  || die("pg_restore -l $dumpfn: $!\n");
+while( my $toc_line = <F> ) {
+  if ( defined (my $i = __match_any($toc_line,@cre)) ) {
+	push(@toc,$toc_line);
+	$matched[$i]++;
+	$nmatched++;
+  }
+}
+close(F);
+($nmatched)
+  || die("! regexps didn't match any pg_dump TOC entries\n");
+
+# resort by object class, but preserve order
+#my $re = qr/\s(?:TABLE|VIEW)\s/;
+my $re = qr/\s(?:ALTER|ACL|COMMENT|GRANT|REVOKE)\s/;
+@toc = ( (grep {not $_ =~ $re} @toc), (grep {$_ =~ $re} @toc) );
+
+my ($listfh, $listfn) = tempfile('/tmp/pg_get-XXXXXX'); #, UNLINK => 1);
+$listfh->print($_) for @toc;
+$listfh->close();
+
+# warn about unmatched regexps
+my @umre = map { $re[$_] } (grep { not defined $matched[$_] } 0..$#re);
+if (@umre) {
+  printf(STDERR "! WARNING: %d unmatched regexps\n", $#umre+1);
+  print(STDERR  "!  $_\n") for @umre;
+}
+
+
+# extract
+my @restore_cmd = ( 'pg_restore', '-vL', $listfn, $dumpfn );
+my $in = new IO::Pipe;
+$in->reader(@restore_cmd);
+while(<$in>) {
+  next if m/^--/;
+  next if m/^SET/;
+  next if m/^\s+$/;
+  s/^CREATE/CREATE OR REPLACE/;
+  print;
+}
+$in->close();
+
+exit(0);
+
+
+sub __match_any($@) {
+  # return index of matched regexp, otherwise undef
+  my $toc_line = shift;
+  my @cre = @_;
+  for(my $i=0; $i<=$#cre; $i++) {
+	return $i if ($toc_line =~ $cre[$i]);
+  }
+  return;
+}
+
+
+__END__
+# can't use exec because we've got temp files which would linger
+my $status = system(@restore_cmd);
+if ($status == -1) {
+  die("failed to execute: $!\n"); 
+} elsif ($status & 127) {
+  die("pg_restore exited with signal", $status & 127, "\n");
+}
+
+exit($status>>8);
+
+
+

@@ -1,0 +1,10 @@
+#!/bin/bash
+# create-users -- creates users in PG using /etc/passwd file
+# usage:
+# sudo -u postgres create-users-from-passwd
+
+comm -23 \
+		<(perl -aF: -lne 'print $F[0] if $F[2]>1000' </etc/passwd | sort) \
+		<(psql -Atc 'select usename from pg_user' | sort) \
+| perl -lne 'print "create user \"$_\" nocreatedb nocreaterole;"' \
+| psql -X -d template1 -U postgres -a

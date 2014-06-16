@@ -1,0 +1,41 @@
+#!/bin/sh
+# pg_copydb -- copy a PostgreSQL database
+#
+# Usage:
+# pg_copydb [pgopts] dbsrc dbdest
+#
+# This script copies a postgresql database using pg_dump and pg_restore.
+# This script overcomes two problems with current (8.1.8) tools:
+# - createdb -Tsrcdb ... requires that srcdb not be in use
+# - pg_dump | pg_restore ... doesn't set comment or config
+#
+# TODO:
+# - set comment and config
+
+echo $0: This script is incomplete and untested
+exit 1
+
+
+_getopt=`/usr/bin/getopt -o 'Uh' -- "$@"`
+if [ $? != 0 ]; then
+	echo "Usage: $0 [ -U username ] [ -h host ] dbsrc dbdst" 1>&2
+	exit 201;
+fi
+eval set -- "$_getopt"
+
+while true ; do
+	case "$1" in
+		-U) PGUSER="$1"; shift;;
+		-h) PGHOST="$1"; shift;;
+		--) shift ; break ;;
+		*) echo "$1: Unsupported option!" 1>&2 ; exit 202 ;;
+	esac
+done
+
+srcdb=$1; shift
+dstdb=$1; shift
+
+unset PGDATABASE PGPORT
+export PGUSER PGHOST
+
+pg_dump -Fc -s "$srcdb" | pg_restore -C "$c

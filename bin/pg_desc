@@ -1,0 +1,19 @@
+#!/bin/sh -e
+
+TMP=/tmp/pg_desc-$$
+
+if [ "$1" = "-E" ]; then
+	ENSCRIPT=1
+	shift
+fi
+
+psql -c "\\d+ $1" >$TMP
+B=`perl -pe 's/^\s+//; print; exit;' $TMP`
+
+if [ "$ENSCRIPT" = 1 ]; then
+	enscript -G <"$TMP" -b "$B"
+else
+	cat $TMP
+fi
+
+/bin/rm -f "$TMP"

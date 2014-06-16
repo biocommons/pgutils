@@ -1,0 +1,60 @@
+#!/bin/bash
+# backup -- backup the csb database
+# $Id: backup,v 1.27 2006/11/04 03:48:38 rkh Exp $
+
+
+BACKUPDIR="/gne/research/backup/rkh/postgresql"
+
+
+if [ -z "$PGHOST" ]; then
+	echo 1>&2 "$0: PGHOST unset; dying"
+	exit 1
+fi
+
+PGD_SOPT=
+case "$1" in
+	-s) PGD_SOPT="-s"; shift;;
+	--debug) TABLE="-t origin"; shift;;
+esac
+
+PGDATABASE=$1
+if [ -z "$PGDATABASE" ]; then
+	echo 1>&2 "$0: Missing database argument; dying"
+	exit 2
+fi
+
+
+DATE=`date +%Y-%m/%Y-%m-%d-%H:%M`;
+R="$BACKUPDIR/$PGDATABASE/$DATE.pgdump${PGD_SOPT}"
+mkdir -p "`dirname $R`"
+
+# after this point and until `trap' near end, all exits are unexpected
+cleanup ()
+  { echo 1>&2 "! exited abnormally (status=$?)"; }
+trap cleanup EXIT
+
+OPTS="$PGD_SOPT $TABLE $PGDATABASE"
+PGDUMP="pg_dump -Fc $OPTS"
+
+(
+echo "PGHOST=$PGHOST; PGUSER=$PGUSER"
+echo "`pg_dump --version` (`type -p pg_dump`)"
+echo "$PGDUMP"
+echo "log in $R.err"
+) >"$R".err
+
+$PGDUMP >"$R" 2>>"$R".err
+
+E="$?"
+S=`perl -le 'printf( "%.2f", (-s $ARGV[0]) / 10**6)' "$R"`
+
+(
+echo "backup in $R ($S MB)"
+) >>"$R".err
+
+cat 1>&2 "$R".err
+
+# reset signal trap to exit gracefully
+trap '' EXIT
+
+exit $E
